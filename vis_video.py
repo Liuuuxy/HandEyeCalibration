@@ -23,24 +23,6 @@ def get_transformation_matrix(position, quaternion):
     return transformation_matrix
 
 
-def rotation_matrix_to_quaternion(matrix):
-    """
-    Convert a rotation matrix into a quaternion.
-    """
-    r = R.from_matrix(matrix)
-    return r.as_quat()
-
-
-def extract_position_and_quaternion(transformation_matrix):
-    """
-    Extract position and quaternion from a 4x4 transformation matrix.
-    """
-    position = transformation_matrix[:3, 3]
-    rotation_matrix = transformation_matrix[:3, :3]
-    quaternion = rotation_matrix_to_quaternion(rotation_matrix)
-    return position, quaternion
-
-
 json_path = "handEyeCalib_data\\recorded_data_1122_2\\tracking_data.json"
 with open(json_path, "r") as f:
     tracking_data = json.load(f)
@@ -57,12 +39,10 @@ K = np.array(
 )
 dist_coeffs = np.array([-0.28331112, 0.17623822, 0.01275944, 0.01448258, -0.29583552])
 
-camera_to_base_rvec = np.zeros((3, 1))
-camera_to_base_tvec = np.zeros((3, 1))
 
 # Iterate through frames and markers
 output_path = (
-    "handEyeCalib_data/recorded_data_1122_2/video/marker_path_overlay_fixed.mp4"
+    "handEyeCalib_data/recorded_data_1122_2/video/marker_path_overlay_test12.mp4"
 )
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 frame_width, frame_height = int(cap.get(3)), int(cap.get(4))
@@ -74,7 +54,7 @@ marker_paths = []
 
 frame_keys = list(tracking_data["1736362354"]["frames"].keys())
 
-T_camera_to_marker1 = np.array(
+T_marker1_to_camera = np.array(
     [
         [3.96653926e-01, 1.13394080e-01, -9.10937674e-01, -2.65475128e02],
         [9.17873600e-01, -6.32405663e-02, 3.91801844e-01, 1.47919302e02],
@@ -83,8 +63,8 @@ T_camera_to_marker1 = np.array(
     ]
 )
 
-# polais is also in mm, so no need to convert
-# T_camera_to_marker1[:3, 3] = T_camera_to_marker1[:3, 3] / 1000
+# polais is also in mm, so no need to convert for this recorded data
+# T_marker1_to_camera[:3, 3] = T_marker1_to_camera[:3, 3] / 1000
 
 paths = []
 
@@ -101,38 +81,37 @@ while cap.isOpened():
 
     marker1 = frame_data[0]["quaternion"][0]
 
-    T_marker1_to_polaris = get_transformation_matrix(marker1[4:7], marker1[:4])
-    T_camera_to_polaris = T_marker1_to_polaris @ T_camera_to_marker1
-    T_polaris_to_camera = np.linalg.inv(T_camera_to_polaris)
+    T_polaris_to_marker1 = get_transformation_matrix(marker1[4:7], marker1[:4])
+    T_polaris_to_camera = T_polaris_to_marker1 @ T_marker1_to_camera
+    T_camera_to_polaris = np.linalg.inv(T_polaris_to_camera)
 
     if frame_data[1]:
         marker2 = frame_data[1]["quaternion"][0]
-        T_marker2_to_polaris = get_transformation_matrix(marker2[4:7], marker2[:4])
-        paths.append(T_marker2_to_polaris)
+        T_polaris_to_marker2 = get_transformation_matrix(marker2[4:7], marker2[:4])
+        paths.append(T_polaris_to_marker2)
     if len(paths) > 30:  # Keep the last 30 points
         paths = paths[-30:]
 
     marker_paths = []
 
     # Draw fading path
-    for idx, T_marker2_to_polaris in enumerate(paths):
-        T_marker2_to_camera = T_polaris_to_camera @ T_marker2_to_polaris
+    for idx, T_polaris_to_marker2 in enumerate(paths):
 
         # Extract rotation and translation from the transformation matrix
-        rotation_matrix_marker2_to_camera = T_marker2_to_camera[:3, :3]
-        position_marker2_to_camera = T_marker2_to_camera[:3, 3]
+        rotation_matrix_camera_to_polaris = T_camera_to_polaris[:3, :3]
+        position_camera_to_polaris = T_camera_to_polaris[:3, 3]
 
         # Convert rotation matrix to rotation vector (Rodrigues)
-        rvec, _ = cv2.Rodrigues(rotation_matrix_marker2_to_camera)
-        tvec = position_marker2_to_camera.reshape(3, 1)
+        rvec, _ = cv2.Rodrigues(rotation_matrix_camera_to_polaris)
+        tvec = position_camera_to_polaris.reshape(3, 1)
 
-        point_3d = np.array([[0, 0, 0]], dtype=np.float32)
+        point_3d = np.array(T_polaris_to_marker2[:3, 3], dtype=np.float32)
 
         uv_distorted, _ = cv2.projectPoints(point_3d, rvec, tvec, K, dist_coeffs)
 
         # Extract the distorted coordinates and convert to integers
         u, v = uv_distorted.ravel()
-        # v = frame.shape[0] - v - 300
+
         u, v = int(round(u)), int(round(v))
         print(f"Marker position: ({u}, {v})")
 
