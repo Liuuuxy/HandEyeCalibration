@@ -23,26 +23,32 @@ def get_transformation_matrix(position, quaternion):
     return transformation_matrix
 
 
-json_path = "handEyeCalib_data\\recorded_data_1122_2\\tracking_data.json"
+json_path = "handEyeCalib_data\\recorded_data_0127_cam_1\\tracking_data.json"
 with open(json_path, "r") as f:
     tracking_data = json.load(f)
 
-video_path = "handEyeCalib_data/recorded_data_1122_2/video/video_1736362354.mp4"
+video_path = "handEyeCalib_data\\recorded_data_0127_cam_1\\video\\video_1738015374.mp4"
 cap = cv2.VideoCapture(video_path)
 
 K = np.array(
+    # [
+    #     [1.32105991e03, 0.00000000e00, 7.11598371e02],
+    #     [0.00000000e00, 1.31810972e03, 3.73443609e02],
+    #     [0.00000000e00, 0.00000000e00, 1.00000000e00],
+    # ]
     [
-        [1.30832797e03, 0.00000000e00, 5.96257634e02],
-        [0.00000000e00, 1.32862288e03, 5.09622317e02],
+        [1.31108397e03, 0.00000000e00, 6.86486022e02],
+        [0.00000000e00, 1.31801722e03, 4.41608492e02],
         [0.00000000e00, 0.00000000e00, 1.00000000e00],
     ]
 )
-dist_coeffs = np.array([-0.28331112, 0.17623822, 0.01275944, 0.01448258, -0.29583552])
+# dist_coeffs = np.array([-0.23051146, 0.18608859, 0.00667657, 0.0133185, -0.90655494])
 
+dist_coeffs = np.array([-0.21975247, -0.01772734, 0.00826037, -0.00210365, -0.24672817])
 
 # Iterate through frames and markers
 output_path = (
-    "handEyeCalib_data/recorded_data_1122_2/video/marker_path_overlay_test12.mp4"
+    "handEyeCalib_data/recorded_data_0127_cam_1/video/marker_path_overlay_test_0203.mp4"
 )
 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
 frame_width, frame_height = int(cap.get(3)), int(cap.get(4))
@@ -52,13 +58,19 @@ out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 frame_idx = 0
 marker_paths = []
 
-frame_keys = list(tracking_data["1736362354"]["frames"].keys())
+frame_keys = list(tracking_data["1738015374"]["frames"].keys())
 
 T_marker1_to_camera = np.array(
+    # [
+    #     [3.96653926e-01, 1.13394080e-01, -9.10937674e-01, -2.65475128e02],
+    #     [9.17873600e-01, -6.32405663e-02, 3.91801844e-01, 1.47919302e02],
+    #     [-1.31802046e-02, -9.91535382e-01, -1.29166052e-01, -2.05290873e01],
+    #     [0.00000000e00, 0.00000000e00, 0.00000000e00, 1.00000000e00],
+    # ]
     [
-        [3.96653926e-01, 1.13394080e-01, -9.10937674e-01, -2.65475128e02],
-        [9.17873600e-01, -6.32405663e-02, 3.91801844e-01, 1.47919302e02],
-        [-1.31802046e-02, -9.91535382e-01, -1.29166052e-01, -2.05290873e01],
+        [4.45038364e-01, 1.01815503e-01, -8.89704703e-01, -2.65384336e02],
+        [8.94482122e-01, -2.91752819e-03, 4.47094198e-01, 1.48419097e02],
+        [4.29253819e-02, -9.94799021e-01, -9.23705588e-02, -1.88705508e01],
         [0.00000000e00, 0.00000000e00, 0.00000000e00, 1.00000000e00],
     ]
 )
@@ -77,8 +89,13 @@ while cap.isOpened():
     overlay = np.zeros_like(frame)
 
     frame_key = frame_keys[frame_idx]
-    frame_data = tracking_data["1736362354"]["frames"][frame_key]["markers"]
+    frame_data = tracking_data["1738015374"]["frames"][frame_key]["markers"]
 
+    if not frame_data[0]:
+        # Write the processed frame to the output video
+        out.write(frame)
+        frame_idx += 1
+        continue
     marker1 = frame_data[0]["quaternion"][0]
 
     T_polaris_to_marker1 = get_transformation_matrix(marker1[4:7], marker1[:4])
@@ -89,8 +106,8 @@ while cap.isOpened():
         marker2 = frame_data[1]["quaternion"][0]
         T_polaris_to_marker2 = get_transformation_matrix(marker2[4:7], marker2[:4])
         paths.append(T_polaris_to_marker2)
-    if len(paths) > 30:  # Keep the last 30 points
-        paths = paths[-30:]
+    if len(paths) > 100:  # Keep the last 30 points
+        paths = paths[-100:]
 
     marker_paths = []
 
